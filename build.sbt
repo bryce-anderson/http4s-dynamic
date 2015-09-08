@@ -2,23 +2,33 @@
 organization in ThisBuild := "net.bryceanderson"
 scalaVersion in ThisBuild := "2.11.7"
 version in ThisBuild := "0.1.0"
+
 licenses := Seq("Apache License, Version 2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 
-bintrayRepository := "http4s-bits"
-
 // Root project
+name := "root"
+description := "Dynamic service loading for http4s"
+noPublish
 
-lazy val core = Project("core", new File("core"))
+lazy val dynamic = Project("dynamic", file("dynamic"))
   .settings(libraryDependencies += providedHttp4sServer)
-  .settings(projectMetadata)
+  .settings(bintraySettings)
 
-lazy val example = Project("example", new File("example"))
+lazy val example = Project("example", file("example"))
+  .settings(noPublish)
   .settings(Revolver.settings)
   .settings(Seq(
     libraryDependencies += blazeServer,
     libraryDependencies += logbackClassic 
   ))
-  .dependsOn(core)
+  .dependsOn(dynamic)
+
+// publishing settings
+lazy val bintraySettings = Seq(
+  bintrayRepository := "http4s-bits",
+  bintrayPackage := "http4s-dynamic",
+  bintrayVcsUrl := Some("https://github.com/bryce-anderson/http4s-dynamic.git")
+) ++ projectMetadata
 
 lazy val projectMetadata = {
   val base = "github.com/bryce-anderson/http4s-dynamic"
@@ -26,7 +36,7 @@ lazy val projectMetadata = {
     homepage := Some(url(s"https://$base")),
     startYear := Some(2015),
     licenses := Seq(
-      "Apache License, Version 2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt")
+      "Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt")
     ),
     scmInfo := {
       Some(ScmInfo(url(s"https://$base"), s"scm:git:https://$base", Some(s"scm:git:git@$base")))
@@ -42,6 +52,13 @@ lazy val projectMetadata = {
       )
   )
 }
+
+lazy val noPublish = Seq(
+  publish := (),
+  bintrayRepository := "",
+  bintrayPackage :="",
+  publishArtifact := false
+)
 
 val http4sVersion = "0.10.0"
 
