@@ -31,7 +31,7 @@ private final class DynamicLoader private(
 
   logger.info("Watching path: " + watchPath.toFile.getAbsolutePath)
 
-  val innerService: HttpService = HttpService.lift(req => service.get().apply(req))
+  val innerService: HttpService = HttpService.lift(req => service.get()(req))
 
 
   // Initialize listening thread

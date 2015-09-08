@@ -10,7 +10,7 @@ name := "root"
 description := "Dynamic service loading for http4s"
 noPublish
 
-lazy val dynamic = Project("dynamic", file("dynamic"))
+lazy val dynamic = Project("http4s-dynamic", file("dynamic"))
   .settings(libraryDependencies += providedHttp4sServer)
   .settings(bintraySettings)
 
