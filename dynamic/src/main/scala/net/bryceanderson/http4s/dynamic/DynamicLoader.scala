@@ -5,12 +5,15 @@ import java.net.URLClassLoader
 import java.nio.file.{StandardWatchEventKinds => SWE, ClosedWatchServiceException, WatchEvent, FileSystems, Path}
 import java.util.concurrent.atomic.AtomicReference
 
+import net.bryceanderson.http4s.dynamic.ConfigParser.Config
 import org.http4s.server.HttpService
 
 import org.log4s.getLogger
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.util.control.NonFatal
+import scalaz.{\/-, -\/}
 
 /**
  * Created on 9/7/15.
@@ -19,14 +22,16 @@ import scala.collection.mutable
 
 private final class DynamicLoader private(
    watchPath: Path,
-   append: DynamicService => HttpService,
-   remove: DynamicService => HttpService
+   append: (String,DynamicService) => HttpService,
+   remove: (String,DynamicService) => HttpService
  ) extends Closeable {
+
+  private case class ServicePair(mountPath: String, ds: DynamicService)
 
   private val logger = getLogger
 
   private val service  = new AtomicReference[HttpService](HttpService.empty)
-  private val pathMap = new mutable.HashMap[File,DynamicService]()
+  private val pathMap = new mutable.HashMap[File,ServicePair]()
   private val watchService = FileSystems.getDefault().newWatchService()
 
   logger.info("Watching path: " + watchPath.toFile.getAbsolutePath)
@@ -34,37 +39,41 @@ private final class DynamicLoader private(
   val innerService: HttpService = HttpService.lift(req => service.get()(req))
 
 
-  // Initialize listening thread
+  // Initialize
   startup()
 
-  private def addResource(path: Path): Unit = {
-    logger.info("Adding resource at path " + path)
+  private def addResource(jarPath: Path): Unit = {
 
-    val loader = new URLClassLoader(Array(path.toUri.toURL),
+    val loader = new URLClassLoader(Array(jarPath.toUri.toURL),
       Thread.currentThread().getContextClassLoader())
 
     val configs = loader.getResources(DynamicServiceLoader.CONFIG_PATH)
 
-    if (!configs.hasMoreElements) {
-      sys.error("No resources found!")
-    }
+    if (!configs.hasMoreElements) logger.warn(s"No resources found in $jarPath!")
+    else {
+      val s = configs.nextElement().openStream()
 
-    val s = configs.nextElement().openStream()
+      ConfigParser.parseAll(s) match {
+        case -\/(error) => logger.error(s"Error loading jar at '$jarPath': $error")
+        case \/-(configs) => configs.foreach { case Config(className, mountPath) =>
+        // this should be a class name
+        val clazz = Class.forName(className, false, loader)
 
-    ConfigParser.parseAll(s).foreach { name =>
-      // this should be a class name
-      val clazz = Class.forName(name, false, loader)
-
-      if (!classOf[DynamicService].isAssignableFrom(clazz)) {
-        logger.warn(s"Invalid class type (${clazz.getSimpleName}) at path $path. Aborting.")
+        if (!classOf[DynamicService].isAssignableFrom(clazz)) {
+          logger.warn(s"Invalid class type (${clazz.getSimpleName}) at path $jarPath. Aborting.")
+        }
+        else {
+          val ds = clazz.newInstance().asInstanceOf[DynamicService]
+          try {
+            service.set(append(mountPath, ds))
+            pathMap += jarPath.toFile -> ServicePair(mountPath,ds)
+            logger.info("Added service from path " + jarPath + " to mount point " + mountPath)
+          }
+          catch {
+            case NonFatal(t) => logger.error(t)(s"Failed to add resource at path $jarPath")
+          }
+        }
       }
-      else {
-        val ds = clazz.newInstance().asInstanceOf[DynamicService]
-        service.set(append(ds))
-
-        pathMap += ((path.toFile,  ds))
-
-        logger.info("Added service from path " + path)
       }
     }
   }
@@ -72,7 +81,9 @@ private final class DynamicLoader private(
   private def removeResource(path: Path): Unit = {
     logger.info("Removing resource at path " + path)
     pathMap.get(path.toFile) match {
-      case Some(ds) => service.set(remove(ds))
+      case Some(ServicePair(mountPath,ds)) =>
+        try service.set(remove(mountPath,ds))
+        catch { case NonFatal(t) => logger.error(t)(s"Error removing service for path $path") }
       case None     => logger.warn("Resource deleted that wasn't in watched dir.")
     }
   }
@@ -100,9 +111,12 @@ private final class DynamicLoader private(
   private[dynamic] def startup(): Unit = {
 
     // add all the resources already in the path
-    watchPath.toFile.listFiles().foreach { file =>
-      val p = file.toPath()
-      if (isValidResource(p)) addResource(p)
+    Option(watchPath.toFile.listFiles()) match {
+      case None => logger.warn("DynamicLoader directory doesn't exist.")
+      case Some(files) => files.foreach { file =>
+        val p = file.toPath()
+        if (isValidResource(p)) addResource(p)
+      }
     }
 
     watchPath.register(watchService, DynamicLoader.events)
@@ -128,13 +142,17 @@ private final class DynamicLoader private(
           watchKey.reset()
         }
         catch {
-          case e: ClosedWatchServiceException => /* NOOP */
+          case e: ClosedWatchServiceException => /* NOOP: this should happen on shutdown */
           case e: Throwable =>
             logger.error(e)("Failure in directory watcher loop")
         }
 
         // shutdown
-        ???
+        service.set(HttpService.empty)
+        pathMap.values.foreach { servicePair =>
+          try remove(servicePair.mountPath, servicePair.ds)
+          catch { case NonFatal(t) => logger.error("Failure shutting down service") }
+        }
       }
     }
 
@@ -148,7 +166,8 @@ private final class DynamicLoader private(
 }
 
 object DynamicLoader {
-  def apply(path: Path)(add: DynamicService => HttpService)(remove: DynamicService => HttpService): HttpService = {
+  def apply(path: Path)(add: (String,DynamicService) => HttpService)
+                       (remove: (String,DynamicService) => HttpService): HttpService = {
     new DynamicLoader(path, add, remove).innerService
   }
 

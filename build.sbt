@@ -23,6 +23,13 @@ lazy val example = Project("example", file("example"))
   ))
   .dependsOn(dynamic)
 
+lazy val exservice = Project("exservice", file("exservice"))
+  .settings(noPublish)
+  .settings(Seq(
+    libraryDependencies += providedHttp4sServer
+  ))
+  .dependsOn(dynamic)
+
 // publishing settings
 lazy val bintraySettings = Seq(
   bintrayRepository := "http4s-bits",

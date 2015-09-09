@@ -1,6 +1,7 @@
-package example
+package exservice
 
 import net.bryceanderson.http4s.dynamic.DynamicService
+
 import org.http4s.Response
 import org.http4s.server.HttpService
 
@@ -9,11 +10,9 @@ import org.http4s.server.HttpService
  */
 
 class MyService extends DynamicService {
-    override val path: String = "dynamic"
-
     override def shutdown(): Unit = ()
 
     override def createService(): HttpService = HttpService {
-      case r => Response().withBody("Its me, the dynamic service!")
+      case r => Response().withBody("Its me, the dynamic service! 2")
     }
   }
