@@ -1,7 +1,8 @@
+import com.typesafe.sbt.SbtNativePackager._
 
 organization in ThisBuild := "net.bryceanderson"
 scalaVersion in ThisBuild := "2.11.7"
-version in ThisBuild := "0.1.0"
+version in ThisBuild := "0.2.0-SNAPSHOT"
 
 licenses := Seq("Apache License, Version 2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 
@@ -16,6 +17,7 @@ lazy val dynamic = Project("http4s-dynamic", file("dynamic"))
 
 lazy val example = Project("example", file("example"))
   .settings(noPublish)
+  .settings(packageArchetype.java_application)
   .settings(Revolver.settings)
   .settings(Seq(
     libraryDependencies += blazeServer,
