@@ -16,7 +16,7 @@ object Main {
     println(s"Starting service at directory: $dir")
     BlazeBuilder
       .mountService(DynamicServiceLoader.vhost(Paths.get(dir)))
-      .bindHttp(port)
+      .bindHttp(port, "0.0.0.0")
       .start
       .run
       .awaitShutdown()

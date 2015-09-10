@@ -2,7 +2,7 @@ import com.typesafe.sbt.SbtNativePackager._
 
 organization in ThisBuild := "net.bryceanderson"
 scalaVersion in ThisBuild := "2.11.7"
-version in ThisBuild := "0.2.0-SNAPSHOT"
+version in ThisBuild := "0.0.1"
 
 licenses := Seq("Apache License, Version 2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 
